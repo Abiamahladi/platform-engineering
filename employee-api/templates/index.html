@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Employee Management System</title>
+</head>
+<body>
+
+    <h1>Employee Registration</h1>
+
+    <form action="/employees" method="POST">
+
+        <label>Name</label><br>
+        <input type="text" name="name" required><br><br>
+
+        <label>Department</label><br>
+        <input type="text" name="department" required><br><br>
+
+        <label>Email</label><br>
+        <input type="email" name="email" required><br><br>
+
+        <button type="submit">Add Employee</button>
+
+    </form>
+
+    <hr>
+
+    <h2>Employees</h2>
+
+    <table border="1" cellpadding="8" cellspacing="0">
+
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Department</th>
+            <th>Email</th>
+        </tr>
+
+        {% for employee in employees %}
+
+        <tr>
+            <td>{{ employee.id }}</td>
+            <td>{{ employee.name }}</td>
+            <td>{{ employee.department }}</td>
+            <td>{{ employee.email }}</td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</body>
+</html>
