@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Employee Registration</title>
+</head>
+<body>
+
+    <h1>Employee Registration</h1>
+
+    <form action="/employees" method="POST">
+
+        <label>Name</label><br>
+        <input type="text" name="name"><br><br>
+
+        <label>Department</label><br>
+        <input type="text" name="department"><br><br>
+
+        <label>Email</label><br>
+        <input type="email" name="email"><br><br>
+
+        <button type="submit">Add Employee</button>
+
+    </form>
+
+</body>
+</html>
