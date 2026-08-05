@@ -112,9 +112,22 @@ def add_employee():
 
 @app.route("/health")
 def health():
-    return jsonify({
-        "status": "healthy"
-    }), 200
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+
+        return jsonify({
+            "status": "healthy",
+            "database": "connected"
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
