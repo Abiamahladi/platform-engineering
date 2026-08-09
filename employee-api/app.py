@@ -1,35 +1,67 @@
-from flask import Flask, jsonify, request, render_template, redirect, url_for
-import psycopg
+import logging
 import os
 import time
 
+import psycopg
+from flask import Flask, jsonify, render_template
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 
-# Wait for PostgreSQL to become available
+
+class DatabaseConnectionError(Exception):
+    """Raised when PostgreSQL cannot be reached."""
+
+
+# The database connection is created when the application starts.
+# Keeping it as None during import allows pytest to import app.py
+# without requiring PostgreSQL to be running.
 conn = None
 
-for attempt in range(10):
-    try:
-        conn = psycopg.connect(
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT")
-        )
-        print("✅ Connected to PostgreSQL!")
-        break
 
-    except Exception:
-        print(f"Database not ready... retrying ({attempt + 1}/10)")
-        time.sleep(2)
+def connect_to_database():
+    """
+    Connect to PostgreSQL with retry logic.
 
-if conn is None:
-    raise Exception("Could not connect to PostgreSQL after 10 attempts.")
+    PostgreSQL may take a few seconds to become available when the
+    application and database containers start together.
+    """
+
+    global conn
+
+    for attempt in range(10):
+        try:
+            conn = psycopg.connect(
+                dbname=os.getenv("DB_NAME"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+                host=os.getenv("DB_HOST"),
+                port=os.getenv("DB_PORT")
+            )
+
+            logger.info("Connected to PostgreSQL!")
+            return
+
+        except psycopg.Error:
+            logger.warning(
+                f"Database not ready... retrying ({attempt + 1}/10)"
+            )
+            time.sleep(2)
+
+    raise DatabaseConnectionError(
+        "Could not connect to PostgreSQL after 10 attempts."
+    )
 
 
 @app.route("/")
 def home():
+    """Display the employee list as an HTML page."""
 
     cursor = conn.cursor()
 
@@ -61,6 +93,7 @@ def home():
 
 @app.route("/employees", methods=["GET"])
 def get_employees():
+    """Return employees as JSON."""
 
     cursor = conn.cursor()
 
@@ -87,47 +120,47 @@ def get_employees():
     return jsonify(employees)
 
 
-@app.route("/employees", methods=["POST"])
-def add_employee():
-
-    name = request.form["name"]
-    department = request.form["department"]
-    email = request.form["email"]
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO employees (name, department, email)
-        VALUES (%s, %s, %s)
-        """,
-        (name, department, email)
-    )
-
-    conn.commit()
-
-    cursor.close()
-
-    return redirect(url_for("home"))
-
 @app.route("/health")
 def health():
+    """
+    Check whether the application can communicate with PostgreSQL.
+
+    Docker, Kubernetes, load balancers, and monitoring systems
+    can use this endpoint.
+    """
+
     try:
         cursor = conn.cursor()
+
+        # A simple query confirms that PostgreSQL is responding.
         cursor.execute("SELECT 1")
+
         cursor.close()
+
+        logger.info("Health check passed")
 
         return jsonify({
             "status": "healthy",
             "database": "connected"
         }), 200
 
-    except Exception as e:
+    except psycopg.Error as e:
+        logger.error(f"Health check failed: {e}")
+
         return jsonify({
             "status": "unhealthy",
             "database": "disconnected",
             "error": str(e)
         }), 500
 
+
+# This runs only when we execute: python app.py
+# pytest can import the application without starting it.
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    connect_to_database()
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True
+    )
