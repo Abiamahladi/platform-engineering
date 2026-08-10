@@ -7,11 +7,9 @@ on:
 
 jobs:
   docker-build:
-
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -20,4 +18,4 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t employee-api .
+          docker build -t employee-api ./employee-api
