@@ -32,4 +32,4 @@ jobs:
         with:
           context: ./employee-api
           push: true
-          tags: ghcr.io/abiamahladi/employee-api:latest
+          tags: ghcr.io/abiamahladi/employee-api:v2
