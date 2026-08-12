@@ -5,7 +5,6 @@ import os
 import psycopg
 from flask import Flask, jsonify, render_template
 
-
 # =========================================================
 # LOGGING
 # =========================================================

@@ -13,9 +13,12 @@ class FakeConnection:
     def cursor(self):
         return FakeCursor()
 
+    def close(self):
+        pass
 
-def test_health():
-    app.conn = FakeConnection()
+
+def test_health(monkeypatch):
+    monkeypatch.setattr(app, "get_db_connection", lambda: FakeConnection())
 
     client = app.app.test_client()
 
