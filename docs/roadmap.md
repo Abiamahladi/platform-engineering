@@ -105,7 +105,23 @@ The Employee API is accessible through a Kubernetes NodePort and successfully co
 
 ---
 
-## Stage 9 — Ingress
+## Stage 9 — GitOps with Argo CD
+
+- [x] Argo CD installation
+- [x] Argo CD Application resource
+- [x] Git repository as source of truth
+- [x] Automated sync
+- [x] Automated self-healing (selfHeal)
+- [x] Automated pruning
+- [x] Drift correction verified live
+
+### Current State
+
+Argo CD continuously syncs the cluster state from the `kubernetes/` path in this repository. Manual cluster changes that drift from Git are automatically reverted (`selfHeal: true`), and resources removed from Git are automatically pruned from the cluster.
+
+---
+
+## Stage 10 — Ingress
 
 - [ ] Ingress Controller
 - [ ] HTTP routing
@@ -115,32 +131,33 @@ The Employee API is accessible through a Kubernetes NodePort and successfully co
 
 ---
 
-## Stage 10 — Observability
+## Stage 11 — Observability
 
 - [x] Kubernetes Metrics Server
 - [x] Node resource metrics
 - [x] Pod resource metrics
-- [ ] Prometheus
-- [ ] Grafana
+- [x] Prometheus
+- [x] Grafana
 - [ ] Loki
-- [ ] Alertmanager
-- [ ] Application metrics
-- [ ] Infrastructure dashboards
+- [ ] Alertmanager configuration
+- [x] Application metrics
+- [x] Infrastructure dashboards
 - [ ] Alerting
 
 ### Current State
 
-Kubernetes Metrics Server is deployed and healthy.
+Kubernetes Metrics Server, Prometheus, and Grafana are deployed and healthy.
 
-The platform can currently expose CPU and memory usage for nodes and Pods through:
+Prometheus scrapes metrics from cluster nodes, Kubernetes components, and workloads. Grafana is connected to Prometheus as a data source, with a Kubernetes cluster monitoring dashboard imported and displaying live data.
 
 ```bash
 kubectl top nodes
 kubectl top pods -A
 ```
+
 ---
 
-## Stage 11 — Infrastructure as Code
+## Stage 12 — Infrastructure as Code
 
 - [ ] Terraform modules
 - [ ] Kubernetes infrastructure automation
@@ -149,7 +166,7 @@ kubectl top pods -A
 
 ---
 
-## Stage 12 — CI/CD
+## Stage 13 — CI/CD
 
 - [ ] GitHub Actions
 - [ ] Automated image builds
@@ -159,7 +176,7 @@ kubectl top pods -A
 
 ---
 
-## Stage 13 — Production Engineering
+## Stage 14 — Production Engineering
 
 - [ ] High availability
 - [ ] Resource requests and limits
@@ -190,6 +207,8 @@ Container Registry
        ↓
 Kubernetes Networking
        ↓
+GitOps (Argo CD)
+       ↓
 Ingress
        ↓
 Observability
@@ -199,3 +218,4 @@ Infrastructure as Code
 CI/CD
        ↓
 Production Engineering
+```

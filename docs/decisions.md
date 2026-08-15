@@ -491,3 +491,223 @@ Planned areas include:
 * Database high availability
 * Backup and recovery
 * Security hardening
+
+---
+
+## 15. Vault Before PostgreSQL (Dependency Ordering)
+
+### Decision
+
+During a full platform rebuild, Vault and the Vault Secrets Operator were deployed and configured **before** PostgreSQL, rather than after.
+
+### Reason
+
+The PostgreSQL manifest consumes its database password from a Kubernetes Secret (`employee-db-secret`) that is created by the Vault Secrets Operator, not defined directly in the manifest.
+
+```text
+Vault
+  ↓
+Vault Secrets Operator
+  ↓
+employee-db-secret (synced from Vault)
+  ↓
+PostgreSQL
+```
+
+Deploying PostgreSQL before this chain exists causes the Pod to fail on startup, since the referenced Secret does not yet exist.
+
+### Engineering Lesson
+
+Dependency order matters as much as the individual manifests. Before rebuilding any part of the platform, existing CRs and manifests should be reviewed to identify what a component actually depends on, rather than assuming the original build order.
+
+---
+
+## 16. Argo CD for GitOps
+
+### Decision
+
+Argo CD was introduced to continuously reconcile the cluster state with the `kubernetes/` directory in this repository.
+
+### Configuration
+
+```yaml
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+```
+
+### Reason
+
+Prior stages relied on manually running `kubectl apply` against manifests. This works, but does not protect against configuration drift — a manual `kubectl edit` or `kubectl scale` against a live resource would silently diverge from what is declared in Git.
+
+`selfHeal: true` closes this gap: any live-state drift, from any source, is automatically reverted back to match Git. `prune: true` ensures resources removed from Git are also removed from the cluster.
+
+### Verification
+
+Drift correction was tested directly by manually scaling the Employee API Deployment to 0 replicas outside of Git:
+
+```text
+kubectl scale deployment employee-api --replicas=0
+```
+
+Argo CD detected the drift and recreated the Pods to match the Git-declared replica count within seconds, confirming the self-healing loop works end-to-end.
+
+---
+
+## 17. Cluster-Wide Default StorageClass
+
+### Decision
+
+The `local-path` StorageClass was set as the cluster-wide default.
+
+```text
+kubectl patch storageclass local-path -p \
+  '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+```
+
+### Reason
+
+Helm charts (Prometheus, Alertmanager) create PersistentVolumeClaims without specifying a StorageClass explicitly, relying on a cluster default to exist. Without one, PVCs remained in a `Pending` state indefinitely, and dependent Pods could not be scheduled.
+
+Since `local-path` is the only StorageClass available in this cluster, marking it default avoids needing to pass an explicit `storageClass` override to every future Helm install.
+
+---
+
+## 18. Prometheus and Grafana via Separate Helm Charts
+
+### Decision
+
+Prometheus and Grafana were installed as two independent Helm releases (`prometheus-community/prometheus` and `grafana/grafana`) into a dedicated `monitoring` namespace, rather than using a single bundled stack (e.g. `kube-prometheus-stack`).
+
+### Reason
+
+Installing each component separately provides clearer visibility into how each piece is configured and connected, which better serves the learning objective of this project.
+
+### Architecture
+
+```text
+Kubernetes cluster
+  ↓ (scrape)
+Prometheus (server, node-exporter, kube-state-metrics, Alertmanager)
+  ↓ (PromQL query, via Grafana data source)
+Grafana
+  ↓
+Dashboards
+```
+
+Grafana was connected to Prometheus as a data source over the in-cluster service DNS name (`prometheus-server.monitoring.svc.cluster.local`), and a community Kubernetes cluster monitoring dashboard was imported to visualize node, pod, and cluster-level metrics.
+
+### Persistence
+
+Grafana's Helm chart disables persistent storage by default. This was explicitly enabled (`persistence.enabled=true`) so dashboards and configuration survive Pod restarts, using the same `local-path` StorageClass.
+
+---
+
+## 15. Vault Before PostgreSQL (Dependency Ordering)
+
+### Decision
+
+During a full platform rebuild, Vault and the Vault Secrets Operator were deployed and configured **before** PostgreSQL, rather than after.
+
+### Reason
+
+The PostgreSQL manifest consumes its database password from a Kubernetes Secret (`employee-db-secret`) that is created by the Vault Secrets Operator, not defined directly in the manifest.
+
+```text
+Vault
+  ↓
+Vault Secrets Operator
+  ↓
+employee-db-secret (synced from Vault)
+  ↓
+PostgreSQL
+```
+
+Deploying PostgreSQL before this chain exists causes the Pod to fail on startup, since the referenced Secret does not yet exist.
+
+### Engineering Lesson
+
+Dependency order matters as much as the individual manifests. Before rebuilding any part of the platform, existing CRs and manifests should be reviewed to identify what a component actually depends on, rather than assuming the original build order.
+
+---
+
+## 16. Argo CD for GitOps
+
+### Decision
+
+Argo CD was introduced to continuously reconcile the cluster state with the `kubernetes/` directory in this repository.
+
+### Configuration
+
+```yaml
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+```
+
+### Reason
+
+Prior stages relied on manually running `kubectl apply` against manifests. This works, but does not protect against configuration drift — a manual `kubectl edit` or `kubectl scale` against a live resource would silently diverge from what is declared in Git.
+
+`selfHeal: true` closes this gap: any live-state drift, from any source, is automatically reverted back to match Git. `prune: true` ensures resources removed from Git are also removed from the cluster.
+
+### Verification
+
+Drift correction was tested directly by manually scaling the Employee API Deployment to 0 replicas outside of Git:
+
+```text
+kubectl scale deployment employee-api --replicas=0
+```
+
+Argo CD detected the drift and recreated the Pods to match the Git-declared replica count within seconds, confirming the self-healing loop works end-to-end.
+
+---
+
+## 17. Cluster-Wide Default StorageClass
+
+### Decision
+
+The `local-path` StorageClass was set as the cluster-wide default.
+
+```text
+kubectl patch storageclass local-path -p \
+  '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+```
+
+### Reason
+
+Helm charts (Prometheus, Alertmanager) create PersistentVolumeClaims without specifying a StorageClass explicitly, relying on a cluster default to exist. Without one, PVCs remained in a `Pending` state indefinitely, and dependent Pods could not be scheduled.
+
+Since `local-path` is the only StorageClass available in this cluster, marking it default avoids needing to pass an explicit `storageClass` override to every future Helm install.
+
+---
+
+## 18. Prometheus and Grafana via Separate Helm Charts
+
+### Decision
+
+Prometheus and Grafana were installed as two independent Helm releases (`prometheus-community/prometheus` and `grafana/grafana`) into a dedicated `monitoring` namespace, rather than using a single bundled stack (e.g. `kube-prometheus-stack`).
+
+### Reason
+
+Installing each component separately provides clearer visibility into how each piece is configured and connected, which better serves the learning objective of this project.
+
+### Architecture
+
+```text
+Kubernetes cluster
+  ↓ (scrape)
+Prometheus (server, node-exporter, kube-state-metrics, Alertmanager)
+  ↓ (PromQL query, via Grafana data source)
+Grafana
+  ↓
+Dashboards
+```
+
+Grafana was connected to Prometheus as a data source over the in-cluster service DNS name (`prometheus-server.monitoring.svc.cluster.local`), and a community Kubernetes cluster monitoring dashboard was imported to visualize node, pod, and cluster-level metrics.
+
+### Persistence
+
+Grafana's Helm chart disables persistent storage by default. This was explicitly enabled (`persistence.enabled=true`) so dashboards and configuration survive Pod restarts, using the same `local-path` StorageClass.
