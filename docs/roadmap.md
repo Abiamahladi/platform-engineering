@@ -117,6 +117,9 @@ The Employee API is accessible through a Kubernetes NodePort and successfully co
 
 ## Stage 10 — Observability
 
+- [x] Kubernetes Metrics Server
+- [x] Node resource metrics
+- [x] Pod resource metrics
 - [ ] Prometheus
 - [ ] Grafana
 - [ ] Loki
@@ -125,6 +128,16 @@ The Employee API is accessible through a Kubernetes NodePort and successfully co
 - [ ] Infrastructure dashboards
 - [ ] Alerting
 
+### Current State
+
+Kubernetes Metrics Server is deployed and healthy.
+
+The platform can currently expose CPU and memory usage for nodes and Pods through:
+
+```bash
+kubectl top nodes
+kubectl top pods -A
+```
 ---
 
 ## Stage 11 — Infrastructure as Code
