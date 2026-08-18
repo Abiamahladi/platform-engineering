@@ -779,3 +779,40 @@ local-path                                  Rook/Ceph
 Simpler, faster to set up            More representative of production
                                        bare metal storage
 ```
+
+---
+
+## 20. MetalLB for LoadBalancer Support (feature/ceph-distributed-storage branch)
+
+### Decision
+
+MetalLB was introduced to provide real `type: LoadBalancer` Service support on this bare metal cluster, replacing reliance on `kubectl port-forward` and NodePort for external/browser access.
+
+### Reason
+
+Bare metal Kubernetes has no built-in LoadBalancer implementation. A `Service` of `type: LoadBalancer` normally depends on a cloud provider's control plane (AWS ELB, GCP Load Balancer, etc.) to provision a real external IP. Without one, such a Service stays in `<pending>` forever on bare metal.
+
+MetalLB fills this gap by taking ownership of a defined IP range and automatically announcing LoadBalancer Service IPs onto the local network, giving each Service a real, routable IP without any cloud dependency.
+
+### Configuration
+
+```text
+Mode: Layer 2 (L2Advertisement)
+IP pool: 172.16.0.200-172.16.0.220
+```
+
+Layer 2 mode was chosen over BGP mode for simplicity, appropriate for a single flat lab network. The pool range was chosen to sit safely outside the node IP range (172.16.0.2-172.16.0.4).
+
+### Verification
+
+Tested end-to-end with a throwaway nginx Pod and LoadBalancer Service:
+
+```text
+kubectl expose pod test-nginx --port=80 --type=LoadBalancer
+```
+
+MetalLB assigned `172.16.0.200` as the external IP, and the service was reachable directly via `curl http://172.16.0.200` with no port-forward or NodePort involved.
+
+### Impact
+
+This replaces the earlier reliance on `kubectl port-forward` plus the iximiuz Labs "Expose HTTP(S) Ports" panel (used previously to reach Argo CD and Grafana). Going forward on this branch, services like Grafana and Argo CD can be exposed with `type: LoadBalancer` and reached directly at a real IP, rather than needing a temporary tunnel.
