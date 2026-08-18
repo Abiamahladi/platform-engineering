@@ -711,3 +711,71 @@ Grafana was connected to Prometheus as a data source over the in-cluster service
 ### Persistence
 
 Grafana's Helm chart disables persistent storage by default. This was explicitly enabled (`persistence.enabled=true`) so dashboards and configuration survive Pod restarts, using the same `local-path` StorageClass.
+
+---
+
+## 19. Rook/Ceph as a Distributed Storage Variant (feature/ceph-distributed-storage branch)
+
+### Decision
+
+This branch introduces Rook-managed Ceph as an alternative storage backend to `local-path`, used on the `main` branch. This is not a replacement of the `main` branch's architecture — it is a separate, improved variant exploring distributed, replicated block storage instead of storage tied to a single node's disk.
+
+`main` continues to use `local-path` exactly as documented in decision 5. This branch exists to demonstrate and document a more production-representative storage approach, to be merged only if/when a decision is made to adopt it as the primary architecture.
+
+### Environment Constraint
+
+The lab environment has no spare raw disks, only the OS disk (`vda`) on each node. Ceph requires a genuinely raw, unpartitioned block device per OSD, and explicitly rejects loop devices:
+
+```text
+W | inventory: skipping device "loop0". unsupported diskType loop
+```
+
+**Workaround:** an LVM Logical Volume was created on top of a loop-backed file on each node (`pvcreate` -> `vgcreate` -> `lvcreate`), and Ceph was pointed at the resulting device-mapper name (`dm-0`), which it accepts. In a real bare metal deployment, dedicated physical disks would be used directly, no loop device or LVM layer needed.
+
+### Ceph/Rook Version Compatibility
+
+The Rook operator (v1.20.4) requires Ceph >= v19.2.0 ("squid"). Example manifests found online often reference older Ceph image tags (e.g. v18.2.4), which fail cluster bootstrap with a version-check error. The `cephVersion.image` field must match the operator's supported range.
+
+### Architectural Change in Rook v1.20
+
+As of Rook v1.20, CSI driver deployment (RBD, CephFS, NFS) is no longer handled by the `rook-ceph` Helm chart. It now requires a separate `ceph-csi-drivers` chart, installed after the `rook-ceph` operator chart:
+
+```text
+helm install rook-ceph rook-release/rook-ceph          (operator + CephCluster CRDs)
+helm install ceph-csi-drivers ceph-csi-operator/ceph-csi-drivers   (actual CSI driver pods)
+```
+
+Without this second chart, `Driver` and `OperatorConfig` custom resources are never created, no `csi-rbdplugin`/`csi-rbdplugin-provisioner` pods are deployed, and any PVC using a Ceph-backed StorageClass stays `Pending` indefinitely with `ExternalProvisioning` events, even though the `CephCluster` itself reports healthy.
+
+### StorageClass Provisioner Naming
+
+The `ceph-csi-drivers` chart registers the RBD driver as `rbd.csi.ceph.com`, not the older `rook-ceph.rbd.csi.ceph.com` naming used in most existing tutorials and examples. A StorageClass referencing the wrong provisioner name results in the same silent `Pending` symptom. The correct name can be confirmed directly:
+
+```text
+kubectl get csidrivers
+```
+
+### Cluster Configuration
+
+```text
+Mon count: 1        (single mon acceptable for a 2-node lab; production should use 3+)
+OSDs: 2              (one per node, LVM-backed)
+Pool replication size: 2   (matches actual OSD count; default of 3 would leave the pool undersized)
+Failure domain: osd   (host-level failure domain requires 3+ nodes)
+```
+
+### Current Limitation
+
+With only 1 mon and `failureDomain: osd`, this cluster does not tolerate a full node failure the way a production Ceph deployment with 3+ mons and `failureDomain: host` would.
+
+### Relationship to main branch
+
+```text
+main branch                          feature/ceph-distributed-storage branch
+     |                                          |
+local-path                                  Rook/Ceph
+(single-node storage)                 (distributed, replicated storage)
+     |                                          |
+Simpler, faster to set up            More representative of production
+                                       bare metal storage
+```
