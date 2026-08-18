@@ -816,3 +816,42 @@ MetalLB assigned `172.16.0.200` as the external IP, and the service was reachabl
 ### Impact
 
 This replaces the earlier reliance on `kubectl port-forward` plus the iximiuz Labs "Expose HTTP(S) Ports" panel (used previously to reach Argo CD and Grafana). Going forward on this branch, services like Grafana and Argo CD can be exposed with `type: LoadBalancer` and reached directly at a real IP, rather than needing a temporary tunnel.
+
+---
+
+## 21. PGDATA Subdirectory for Ceph-Backed PostgreSQL (feature/ceph-distributed-storage branch)
+
+### Decision
+
+PostgreSQL was configured to use a `PGDATA` subdirectory (`/var/lib/postgresql/data/pgdata`) instead of the volume mount root (`/var/lib/postgresql/data`).
+
+### Problem
+
+When PostgreSQL's StatefulSet was first deployed against a `ceph-block` PVC (unchanged from the `local-path` version of `postgres.yaml`), the pod crashed on startup:
+
+```text
+initdb: error: directory "/var/lib/postgresql/data" exists but is not empty
+initdb: detail: It contains a lost+found directory, perhaps due to it being a mount point.
+```
+
+### Reason
+
+Ceph RBD volumes are formatted with a filesystem (ext4) by the CSI driver before being mounted. Every freshly formatted ext4 filesystem automatically contains a `lost+found` directory at its root — this is standard Linux filesystem behavior, unrelated to Ceph or Postgres specifically.
+
+`local-path` (a simple hostPath-backed provisioner) does not format a filesystem this way, so this issue never appeared on the `main` branch's storage backend. It is specific to block-storage CSI volumes like Ceph RBD.
+
+PostgreSQL's `initdb` requires an empty data directory and refuses to initialize if any files exist there, including `lost+found`.
+
+### Fix
+
+```yaml
+env:
+  - name: PGDATA
+    value: /var/lib/postgresql/data/pgdata
+```
+
+The volume mount path is unchanged. `PGDATA` tells PostgreSQL to treat a subdirectory inside the mount as its actual data directory. `lost+found` remains at the mount root but is never inspected by `initdb`, since Postgres now only operates inside `pgdata/`, which it creates fresh and genuinely empty.
+
+### Note
+
+This manifest change exists only on this branch. `main`'s `postgres.yaml` remains unmodified, since `local-path` never triggers this issue.
